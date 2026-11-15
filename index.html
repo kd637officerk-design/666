@@ -16,13 +16,49 @@
     <meta name="apple-mobile-web-app-title" content="Symphony 9" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
   </head>
   <body class="bg-[#09090b] text-zinc-100 antialiased selection:bg-violet-600/40 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <div
+        id="boot-fallback"
+        style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#09090b;color:#e4e4e7;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;"
+      >
+        <div style="font-size:16px;font-weight:600;letter-spacing:0.02em;">Symphony No. 9</div>
+        <div id="boot-status" style="margin-top:8px;font-size:12px;color:#a1a1aa;">Loading player...</div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        function showBootError(msg) {
+          if (window.__SYMPHONY_MOUNTED__) return;
+          var el = document.getElementById('boot-status');
+          if (!el) return;
+          el.style.color = '#fca5a5';
+          el.style.maxWidth = '360px';
+          el.style.wordBreak = 'break-word';
+          el.textContent = 'Startup error: ' + msg;
+        }
+        window.addEventListener('error', function (e) {
+          showBootError((e && (e.message || (e.error && e.error.message))) || 'Script error');
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          showBootError((r && (r.message || String(r))) || 'Unhandled promise rejection');
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

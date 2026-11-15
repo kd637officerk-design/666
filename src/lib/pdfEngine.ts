@@ -1,8 +1,18 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { DiyPdfThemeConfig, PdfThemeId, UniverseAmbientKind } from '../types';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
+
+async function getPdfJs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs').then((lib) => {
+      lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      return lib;
+    });
+  }
+  return pdfjsPromise;
+}
 
 export interface PdfThemePreset {
   id: Exclude<PdfThemeId, 'diy'>;
@@ -597,7 +607,7 @@ export function getDiyCanvasFilter(cfg: DiyPdfThemeConfig): string {
   }
 }
 
-export async function closePdfDocument(pdf: pdfjsLib.PDFDocumentProxy | null): Promise<void> {
+export async function closePdfDocument(pdf: PDFDocumentProxy | null): Promise<void> {
   if (!pdf) return;
   const p = pdf as unknown as { destroy?: () => Promise<void>; cleanup?: () => Promise<void> };
   if (typeof p.destroy === 'function') await p.destroy();
@@ -609,9 +619,10 @@ export async function generatePdfThumbnail(file: File): Promise<{
   totalPages: number;
 }> {
   try {
+    const pdfjsLib = await getPdfJs();
     const data = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(data) });
-    const pdf = await loadingTask.promise;
+    const pdf = (await loadingTask.promise) as unknown as PDFDocumentProxy;
     const totalPages = pdf.numPages;
     const page = await pdf.getPage(1);
     const viewport = page.getViewport({ scale: 0.35 });
@@ -632,8 +643,9 @@ export async function generatePdfThumbnail(file: File): Promise<{
   }
 }
 
-export async function openPdfDocument(file: File): Promise<pdfjsLib.PDFDocumentProxy> {
+export async function openPdfDocument(file: File): Promise<PDFDocumentProxy> {
+  const pdfjsLib = await getPdfJs();
   const data = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(data) });
-  return loadingTask.promise;
+  return (await loadingTask.promise) as unknown as PDFDocumentProxy;
 }
