@@ -1,0 +1,6 @@
+{
+  "name": "KuroDeck",
+  "description": "Lightweight OLED local audio player, real-time device file manager, 4K GIF wallpaper studio, and themed PDF reader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

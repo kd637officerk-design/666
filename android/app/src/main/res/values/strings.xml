@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Symphony No. 9</string>
+    <string name="title_activity_main">Symphony No. 9</string>
+    <string name="package_name">com.symphonyno9.player</string>
+    <string name="custom_url_scheme">com.symphonyno9.player</string>
+</resources>

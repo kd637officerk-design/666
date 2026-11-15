@@ -1,0 +1,284 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
+    --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  html,
+  body {
+    height: 100%;
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
+    touch-action: pan-y;
+    background-color: #09090b;
+    color: #f4f4f5;
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Steady scroll containers: prevent rubber-band bounce and accidental horizontal drift */
+.steady-scroll {
+  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Steady interactive scrubbers/sliders: lock all touch panning while dragging */
+.steady-drag {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Lightweight virtualized list rows */
+.lightweight-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 64px;
+}
+
+/* Clean dark scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.45);
+}
+
+/* Comic / Manga / TWD halftone & subtle textures for PDF themes */
+.pdf-pattern-anime {
+  background-image: radial-gradient(rgba(244, 63, 94, 0.12) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.pdf-pattern-dc {
+  background-image: linear-gradient(135deg, rgba(56, 189, 248, 0.04) 25%, transparent 25%),
+    linear-gradient(225deg, rgba(234, 179, 8, 0.04) 25%, transparent 25%);
+  background-size: 28px 28px;
+}
+
+.pdf-pattern-marvel {
+  background-image: radial-gradient(rgba(239, 68, 68, 0.11) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+.pdf-pattern-twd {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Hyper-realistic Old Europe / Medieval Oak Desk & Candlelight */
+.pdf-medieval-desk {
+  background-color: #140d07;
+  background-image:
+    radial-gradient(ellipse at 50% 35%, rgba(217, 119, 6, 0.16) 0%, rgba(120, 53, 15, 0.08) 45%, rgba(10, 6, 3, 0.92) 100%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(58, 34, 16, 0.28) 0px,
+      rgba(36, 20, 9, 0.32) 3px,
+      rgba(74, 43, 20, 0.22) 7px,
+      rgba(24, 13, 6, 0.35) 12px
+    );
+}
+
+/* Aged vellum parchment surface */
+.parchment-sheet {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 248, 231, 0.55) 0%, transparent 55%),
+    radial-gradient(circle at 82% 80%, rgba(180, 132, 72, 0.22) 0%, transparent 60%),
+    linear-gradient(180deg, #ecdab7 0%, #e5cfa4 50%, #dcc190 100%);
+  box-shadow:
+    inset 0 0 42px rgba(92, 54, 18, 0.38),
+    inset 0 0 8px rgba(62, 34, 10, 0.55),
+    0 20px 55px rgba(0, 0, 0, 0.78);
+}
+
+/* Turned walnut & antique brass scroll dowel */
+.parchment-roller {
+  background: linear-gradient(
+    180deg,
+    #3f2410 0%,
+    #784822 24%,
+    #522f15 55%,
+    #241307 100%
+  );
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.75),
+    inset 0 2px 3px rgba(251, 191, 36, 0.28);
+}
+
+.parchment-brass-cap {
+  background: linear-gradient(
+    180deg,
+    #fde68a 0%,
+    #d97706 40%,
+    #92400e 75%,
+    #451a03 100%
+  );
+}
+
+/* Realistic book spine gutter for 2-page spread */
+.book-spine-left {
+  box-shadow: inset -18px 0 26px -12px rgba(0, 0, 0, 0.42);
+}
+
+.book-spine-right {
+  box-shadow: inset 18px 0 26px -12px rgba(0, 0, 0, 0.42);
+}
+
+/* Hyper-realistic Space Hologram scanline & projection frame */
+.hologram-frame {
+  position: relative;
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  box-shadow:
+    0 0 28px rgba(56, 189, 248, 0.22),
+    0 0 70px rgba(34, 211, 238, 0.12),
+    inset 0 0 24px rgba(56, 189, 248, 0.16);
+}
+
+.hologram-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(103, 232, 249, 0.08) 0px,
+    rgba(103, 232, 249, 0.08) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+@keyframes holoSweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+.hologram-sweep-bar {
+  animation: holoSweep 5.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hologram-sweep-bar {
+    animation: none;
+  }
+}
+
+/* Real 3D Physical Tall Page Curl Stage */
+.page-flip-stage {
+  perspective: 2200px;
+  perspective-origin: 50% 42%;
+  transform-style: preserve-3d;
+}
+
+.page-flip-leaf {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.page-flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.page-flip-face-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(180deg);
+}
+
+/* Tactile curled page ridge highlight that sweeps across the turning page */
+.page-curl-ridge {
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.page-curl-shadow-cast {
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* Subtle breathing Ken Burns motion for AI-generated universe backdrops */
+@keyframes universeBreathe {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.06) translate3d(-1%, -1%, 0);
+  }
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+.universe-ai-breathe {
+  animation: universeBreathe 24s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes slowSpinClockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slowSpinCounter {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.universe-spin-cw {
+  animation: slowSpinClockwise 42s linear infinite;
+}
+
+.universe-spin-ccw {
+  animation: slowSpinCounter 54s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .universe-ai-breathe,
+  .universe-spin-cw,
+  .universe-spin-ccw {
+    animation: none;
+  }
+}
+
