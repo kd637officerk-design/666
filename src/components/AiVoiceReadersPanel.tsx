@@ -1,16 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  Download,
   Globe,
   Headphones,
   Loader2,
   Mic,
+  PackagePlus,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   Sparkles,
   Square,
   Trash2,
+  Upload,
   Volume2,
   X,
 } from 'lucide-react';
@@ -22,11 +26,15 @@ import {
 import {
   DeviceVoiceOption,
   GEMINI_NATURAL_VOICES,
+  OFFLINE_STARTER_VOICE_PACK,
 } from '../lib/voiceReaders';
 import {
   DEFAULT_CLOUD_TTS_ORIGIN,
+  canUseCloudTtsNow,
   isNativeAndroidRuntime,
   listHybridDeviceVoices,
+  openAndroidTtsVoiceInstaller,
+  resetCloudTtsReachabilityCache,
   resolveHealthApiEndpoint,
   resolveTtsApiEndpoint,
   speakWithNativeOrDeviceTts,
@@ -45,7 +53,7 @@ interface AiVoiceReadersPanelProps {
 
 const SAMPLE_LINES = [
   'The wind carried the scent of pine across the fjord as the chapter began.',
-  'Stars flickered above the orbital deck while the ancient archive opened.',
+  'El viento trajo el aroma de los pinos mientras comenzaba el capítulo.',
 ];
 
 export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
@@ -59,8 +67,8 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
 }) => {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [name, setName] = useState('');
-  const [engine, setEngine] = useState<VoiceReaderEngine>('gemini-tts');
-  const [voiceName, setVoiceName] = useState<string>('Aoede');
+  const [engine, setEngine] = useState<VoiceReaderEngine>('device-tts');
+  const [voiceName, setVoiceName] = useState<string>('persona:Kore');
   const [stylePrompt, setStylePrompt] = useState(
     'Warm, natural, expressive audiobook narrator with smooth phrasing'
   );
@@ -77,21 +85,33 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
   const [serverTestMsg, setServerTestMsg] = useState<string | null>(null);
 
   const [deviceVoices, setDeviceVoices] = useState<DeviceVoiceOption[]>([]);
+  const [loadingVoices, setLoadingVoices] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [packStatusMsg, setPackStatusMsg] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setServerDraft(ttsServerUrl);
   }, [ttsServerUrl]);
 
+  const refreshDeviceVoices = async () => {
+    setLoadingVoices(true);
+    try {
+      const list = await listHybridDeviceVoices();
+      setDeviceVoices(list);
+    } finally {
+      setLoadingVoices(false);
+    }
+  };
+
   useEffect(() => {
-    const refresh = () => {
-      void listHybridDeviceVoices().then(setDeviceVoices);
-    };
-    refresh();
+    void refreshDeviceVoices();
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = refresh;
+      window.speechSynthesis.onvoiceschanged = () => {
+        void refreshDeviceVoices();
+      };
     }
     return () => {
       if (previewAudioRef.current) {
@@ -128,7 +148,8 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
     setTestingId(reader.id);
     setPreviewError(null);
 
-    const sampleText = SAMPLE_LINES[0];
+    const isSpanish = Boolean(reader.language && /es|span|español/i.test(reader.language));
+    const sampleText = isSpanish ? SAMPLE_LINES[1] : SAMPLE_LINES[0];
 
     try {
       if (reader.engine === 'device-tts') {
@@ -137,6 +158,7 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
           rate: reader.rate,
           preferredVoiceUri: reader.voiceName,
           languageHint: reader.language,
+          personaHint: reader.voiceName,
           onDone: () => setTestingId(null),
           onError: (msg) => {
             setTestingId(null);
@@ -176,6 +198,22 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
         return;
       }
 
+      const cloudAvailable = await canUseCloudTtsNow(ttsServerUrl);
+      if (!cloudAvailable) {
+        await speakWithNativeOrDeviceTts({
+          text: sampleText,
+          rate: reader.rate,
+          languageHint: reader.language,
+          personaHint: reader.voiceName,
+          onDone: () => setTestingId(null),
+          onError: (msg) => {
+            setTestingId(null);
+            setPreviewError(msg);
+          },
+        });
+        return;
+      }
+
       const res = await fetch(resolveTtsApiEndpoint(ttsServerUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,10 +240,13 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
           text: sampleText,
           rate: reader.rate,
           languageHint: reader.language,
+          personaHint: reader.voiceName,
           onDone: () => setTestingId(null),
-          onError: () => {
+          onError: (msg) => {
             setTestingId(null);
-            setPreviewError(err instanceof Error ? err.message : 'Unable to preview voice.');
+            setPreviewError(
+              msg || (err instanceof Error ? err.message : 'Unable to preview voice.')
+            );
           },
         });
       } catch {
@@ -218,11 +259,19 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
   const handleTestCloudServer = async () => {
     setServerTestStatus('testing');
     setServerTestMsg(null);
+    resetCloudTtsReachabilityCache();
     const cleaned = serverDraft.trim().replace(/\/+$/, '');
     onSaveTtsServerUrl(cleaned);
     try {
       const endpoint = resolveHealthApiEndpoint(cleaned);
-      const res = await fetch(endpoint);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(endpoint, { signal: controller.signal });
+      clearTimeout(timer);
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Server returned login/HTML instead of JSON API');
+      }
       const json = (await res.json()) as { ok?: boolean; hasGeminiKey?: boolean };
       if (!res.ok || !json.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -236,12 +285,103 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
     } catch {
       setServerTestStatus('error');
       setServerTestMsg(
-        `Could not reach Cloud TTS server. ${
+        `Cloud TTS server unreachable from this device. ${
           isNativeAndroidRuntime()
-            ? 'Android native offline voices will be used automatically.'
+            ? 'Android native offline voices are active automatically with zero delay.'
             : 'Device offline voices will be used until online.'
         }`
       );
+    }
+  };
+
+  const handleInstallOfflinePack = () => {
+    const existingIds = new Set(readers.map((r) => r.id));
+    let addedCount = 0;
+    for (const preset of OFFLINE_STARTER_VOICE_PACK) {
+      if (!existingIds.has(preset.id)) {
+        onSaveCustomReader(preset);
+        addedCount += 1;
+      }
+    }
+    if (!existingIds.has(OFFLINE_STARTER_VOICE_PACK[0].id) || addedCount > 0) {
+      onSelectActiveReader(OFFLINE_STARTER_VOICE_PACK[0].id);
+    }
+    setPackStatusMsg(
+      addedCount > 0
+        ? `Added ${addedCount} ready-to-use offline narrator voices & activated English (US) · Warm Storyteller.`
+        : 'All 6 offline starter narrator voices are already added.'
+    );
+  };
+
+  const handleExportVoicePack = () => {
+    const customList = readers.filter((r) => !r.isBuiltIn);
+    const payload = {
+      app: 'Symphony No. 9',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      readers: customList.length > 0 ? customList : OFFLINE_STARTER_VOICE_PACK,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'symphony-voice-pack.json';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setPackStatusMsg('Exported symphony-voice-pack.json');
+  };
+
+  const handleImportVoicePack = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as
+        | AiVoiceReaderProfile[]
+        | { readers?: AiVoiceReaderProfile[] };
+      const list = Array.isArray(parsed) ? parsed : parsed?.readers;
+      if (!Array.isArray(list) || list.length === 0) {
+        setPackStatusMsg('No voice profiles found in that JSON file.');
+        return;
+      }
+      const existingIds = new Set(readers.map((r) => r.id));
+      let imported = 0;
+      let firstId: string | null = null;
+      for (const item of list) {
+        if (!item?.name || !item?.engine || !item?.voiceName) continue;
+        const safeId =
+          item.id && !existingIds.has(item.id)
+            ? item.id
+            : `imported:${Date.now()}:${imported}:${Math.random().toString(36).slice(2, 5)}`;
+        const profile: AiVoiceReaderProfile = {
+          id: safeId,
+          name: String(item.name).slice(0, 64),
+          engine: item.engine,
+          voiceName: String(item.voiceName),
+          stylePrompt: String(item.stylePrompt || 'Natural audiobook narrator'),
+          rate: typeof item.rate === 'number' ? item.rate : 1,
+          language: item.language || 'Auto (EN / ES)',
+          customEndpointUrl: item.customEndpointUrl,
+          notes: item.notes,
+          isBuiltIn: false,
+          createdAt: Date.now(),
+        };
+        onSaveCustomReader(profile);
+        if (!firstId) firstId = profile.id;
+        imported += 1;
+      }
+      if (firstId) onSelectActiveReader(firstId);
+      setPackStatusMsg(
+        imported > 0
+          ? `Imported ${imported} voice reader${imported > 1 ? 's' : ''} into your player.`
+          : 'Could not import any valid voices from that file.'
+      );
+    } catch {
+      setPackStatusMsg('Invalid voice pack JSON file.');
     }
   };
 
@@ -291,26 +431,59 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 px-4 py-4">
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => void handleImportVoicePack(e)}
+      />
+
       {/* Header + Add IA Natural Voice Reader CTA */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-base font-semibold text-white">
-            AI Natural Voice Readers
+            AI &amp; Offline Voice Readers
           </h2>
           <p className="text-xs text-zinc-400">
-            Choose from expanded natural voices or create and save custom AI (IA) voice reader profiles.
+            Use your phone&apos;s offline HD voices, load the +6 offline narrator pack, or import custom voices.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setBuilderOpen((v) => !v)}
-          className="flex min-h-[42px] items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-xs font-semibold text-zinc-950 hover:bg-emerald-300"
-        >
-          {builderOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          <span>{builderOpen ? 'Close Builder' : 'Add AI Voice Reader'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleInstallOfflinePack}
+            className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 text-xs font-semibold text-amber-200 hover:bg-amber-500/25"
+          >
+            <PackagePlus className="h-4 w-4" />
+            <span>Add +6 Offline Voices</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBuilderOpen((v) => !v)}
+            className="flex min-h-[40px] items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-xs font-semibold text-zinc-950 hover:bg-emerald-300"
+          >
+            {builderOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            <span>{builderOpen ? 'Close Builder' : 'New Voice Reader'}</span>
+          </button>
+        </div>
       </div>
+
+      {packStatusMsg && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200">
+          <span>{packStatusMsg}</span>
+          <button
+            type="button"
+            onClick={() => setPackStatusMsg(null)}
+            className="text-emerald-300 hover:text-white"
+            aria-label="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Active Reader Banner */}
       {activeReader && (
@@ -356,26 +529,149 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
         </p>
       )}
 
+      {/* Installed Phone / Android Offline Voices Section */}
+      <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-display text-xs font-semibold text-white">
+              Phone Offline Voices ({deviceVoices.length})
+            </h3>
+            <p className="text-[11px] text-zinc-400">
+              {deviceVoices.length > 0
+                ? 'Tap Preview or + Add to save any installed voice directly into your player.'
+                : 'No voices detected yet. Tap Refresh or install Google HD voice packs on your phone.'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void refreshDeviceVoices()}
+              className="flex min-h-[34px] items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-800"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingVoices ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+
+            {isNativeAndroidRuntime() && (
+              <button
+                type="button"
+                onClick={() => void openAndroidTtsVoiceInstaller()}
+                className="flex min-h-[34px] items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/25"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Install Android HD Voices</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="flex min-h-[34px] items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-[11px] text-zinc-200 hover:bg-zinc-800"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Import JSON</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportVoicePack}
+              className="flex min-h-[34px] items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-[11px] text-zinc-200 hover:bg-zinc-800"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Export</span>
+            </button>
+          </div>
+        </div>
+
+        {deviceVoices.length > 0 && (
+          <div className="grid max-h-60 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            {deviceVoices.slice(0, 40).map((dv) => (
+              <div
+                key={dv.voiceURI}
+                className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/80 bg-black/50 p-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-white">{dv.name}</p>
+                  <p className="truncate font-mono text-[10px] text-zinc-400">
+                    {dv.lang} · {dv.localService ? 'Offline' : 'Network'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void testReader({
+                        id: `device:${dv.voiceURI}`,
+                        engine: 'device-tts',
+                        voiceName: dv.voiceURI,
+                        stylePrompt: 'Device native voice',
+                        rate: 1,
+                        language: dv.lang,
+                      })
+                    }
+                    aria-label={`Preview ${dv.name}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                  >
+                    {testingId === `device:${dv.voiceURI}` ? (
+                      <Square className="h-3 w-3" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const created: AiVoiceReaderProfile = {
+                        id: `device-reader:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
+                        name: dv.name,
+                        engine: 'device-tts',
+                        voiceName: dv.voiceURI,
+                        stylePrompt: `Phone voice (${dv.lang})`,
+                        rate: 1,
+                        language: dv.lang,
+                        notes: dv.localService ? 'Offline device voice' : 'Network device voice',
+                        isBuiltIn: false,
+                        createdAt: Date.now(),
+                      };
+                      onSaveCustomReader(created);
+                      onSelectActiveReader(created.id);
+                      setPackStatusMsg(`Added & activated "${dv.name}".`);
+                    }}
+                    title="Add & activate this voice"
+                    aria-label={`Add ${dv.name}`}
+                    className="flex h-8 items-center gap-1 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-2 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Hybrid Cloud + Offline Android Voice Bridge Settings */}
       <div className="space-y-2.5 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4 text-cyan-300" />
             <span className="font-display text-xs font-semibold text-white">
-              Hybrid Voice Connection (APK &amp; Offline HTML)
+              Cloud TTS Server Bridge (Optional)
             </span>
           </div>
           <span className="font-mono text-[10px] text-zinc-400">
             {isNativeAndroidRuntime()
-              ? 'Android APK · Cloud + Native TTS'
+              ? 'Android APK · Offline Native Ready'
               : 'Cloud online + Cached / Device offline'}
           </span>
         </div>
 
         <p className="text-[11px] leading-relaxed text-zinc-400">
-          Uses natural cloud narrator voices whenever reachable and caches spoken pages locally. If
-          offline in the Android APK, falls back automatically to Android&apos;s native Speech
-          Services engine.
+          When reachable, cloud narrators generate natural voice audio and cache pages locally. When
+          unavailable or offline on Android, the player automatically speaks through your phone&apos;s
+          offline speech engine with zero delay.
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -405,6 +701,7 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
               onClick={() => {
                 setServerDraft('');
                 onSaveTtsServerUrl('');
+                resetCloudTtsReachabilityCache();
                 setServerTestStatus('idle');
                 setServerTestMsg(null);
               }}
@@ -437,7 +734,7 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
           <div className="flex items-center gap-2 border-b border-zinc-800 pb-2.5">
             <Sparkles className="h-4 w-4 text-emerald-400" />
             <h3 className="font-display text-sm font-semibold text-white">
-              Create Custom AI (IA) Natural Voice Reader
+              Create Custom Voice Reader
             </h3>
           </div>
 
@@ -466,14 +763,14 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
                   setEngine(nextEng);
                   if (nextEng === 'gemini-tts') setVoiceName('Aoede');
                   else if (nextEng === 'device-tts') {
-                    setVoiceName(deviceVoices[0]?.voiceURI || 'Default');
+                    setVoiceName(deviceVoices[0]?.voiceURI || 'persona:Kore');
                   }
                 }}
                 className="min-h-[42px] w-full rounded-xl border border-zinc-800 bg-black/70 px-3 text-sm text-white focus:border-emerald-400 focus:outline-none"
               >
-                <option value="gemini-tts">AI Natural Voice (Gemini TTS)</option>
-                <option value="device-tts">Device Natural Voice (Offline OS)</option>
-                <option value="custom-url">Custom IA Reader Endpoint (URL)</option>
+                <option value="device-tts">Phone Offline Voice (Android / OS)</option>
+                <option value="gemini-tts">AI Natural Voice (Cloud + Fallback)</option>
+                <option value="custom-url">Custom Reader Endpoint (URL)</option>
               </select>
             </div>
           </div>
@@ -516,31 +813,44 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
               </div>
             </div>
           ) : engine === 'device-tts' ? (
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Device Installed Voice
-              </label>
-              <select
-                value={voiceName}
-                onChange={(e) => setVoiceName(e.target.value)}
-                className="min-h-[42px] w-full rounded-xl border border-zinc-800 bg-black/70 px-3 text-sm text-white focus:border-emerald-400 focus:outline-none"
-              >
-                {deviceVoices.length === 0 ? (
-                  <option value="Default">System Default Natural Voice</option>
-                ) : (
-                  deviceVoices.map((dv) => (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Device Installed Voice
+                </label>
+                <select
+                  value={voiceName}
+                  onChange={(e) => setVoiceName(e.target.value)}
+                  className="min-h-[42px] w-full rounded-xl border border-zinc-800 bg-black/70 px-3 text-sm text-white focus:border-emerald-400 focus:outline-none"
+                >
+                  <option value="persona:Kore">Auto Best Voice · Warm Storyteller</option>
+                  <option value="persona:Charon">Auto Best Voice · Deep Chronicle</option>
+                  <option value="persona:Aoede">Auto Best Voice · Literary Soft</option>
+                  {deviceVoices.map((dv) => (
                     <option key={dv.voiceURI} value={dv.voiceURI}>
                       {dv.name} ({dv.lang})
                     </option>
-                  ))
-                )}
-              </select>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Language Hint
+                </label>
+                <input
+                  type="text"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  placeholder="Auto (EN / ES), Spanish, English..."
+                  className="min-h-[42px] w-full rounded-xl border border-zinc-800 bg-black/70 px-3 text-sm text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                  IA Reader Endpoint URL *
+                  Reader Endpoint URL *
                 </label>
                 <input
                   type="text"
@@ -567,7 +877,7 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
 
           <div className="space-y-1">
             <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-              AI Voice Persona & Pacing Prompt
+              Voice Persona &amp; Pacing Prompt
             </label>
             <input
               type="text"
@@ -641,17 +951,17 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
               type="submit"
               className="min-h-[42px] rounded-xl bg-emerald-400 px-5 text-xs font-semibold text-zinc-950 hover:bg-emerald-300"
             >
-              Save AI Voice Reader
+              Save Voice Reader
             </button>
           </div>
         </form>
       )}
 
-      {/* Custom Saved AI Readers */}
+      {/* Custom Saved Readers */}
       {customReaders.length > 0 && (
         <section className="space-y-2.5">
           <h3 className="font-mono text-[11px] uppercase tracking-wider text-zinc-400">
-            Your Saved AI Voice Readers ({customReaders.length})
+            Your Saved Voice Readers ({customReaders.length})
           </h3>
           <div className="grid gap-2.5 sm:grid-cols-2">
             {customReaders.map((r) => {
@@ -674,7 +984,7 @@ export const AiVoiceReadersPanel: React.FC<AiVoiceReadersPanelProps> = ({
                         {r.engine === 'gemini-tts'
                           ? `AI · ${r.voiceName}`
                           : r.engine === 'device-tts'
-                            ? 'Device'
+                            ? 'Offline'
                             : 'Custom URL'}
                       </span>
                     </div>

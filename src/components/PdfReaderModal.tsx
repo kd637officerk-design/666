@@ -51,6 +51,7 @@ import { playBookmarkSound, playPageTurnSound } from '../lib/pdfSounds';
 import { formatExactLeaveStamp, formatReadingMinSec } from '../lib/pdfTime';
 import {
   buildTtsCacheKey,
+  canUseCloudTtsNow,
   isNativeAndroidRuntime,
   resolveTtsApiEndpoint,
   speakWithNativeOrDeviceTts,
@@ -680,6 +681,7 @@ export const PdfReaderModal: React.FC<PdfReaderModalProps> = ({
           rate: chosenRate,
           preferredVoiceUri,
           languageHint: profile?.language,
+          personaHint: readerVoiceName,
           onStart: () => setVoiceState('playing'),
           onDone: () => {
             if (autoAdvanceRef.current && pageNum < pdfDoc.numPages) {
@@ -716,6 +718,12 @@ export const PdfReaderModal: React.FC<PdfReaderModalProps> = ({
           ttsCacheRef.current[cacheKey] = persistedAudio;
           setVoiceSourceLabel('cached');
           playAudioUrl(persistedAudio);
+          return;
+        }
+
+        const cloudAvailable = await canUseCloudTtsNow(ttsServerUrl);
+        if (!cloudAvailable) {
+          speakViaHybridOffline();
           return;
         }
       }

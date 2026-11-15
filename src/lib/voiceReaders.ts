@@ -203,7 +203,84 @@ export interface DeviceVoiceOption {
   voiceURI: string;
   name: string;
   lang: string;
+  localService?: boolean;
+  rawId?: string;
 }
+
+export const OFFLINE_STARTER_VOICE_PACK: AiVoiceReaderProfile[] = [
+  {
+    id: 'pack:offline-us-warm',
+    name: 'English (US) · Warm Storyteller',
+    engine: 'device-tts',
+    voiceName: 'persona:Kore',
+    stylePrompt: 'Warm, steady English offline audiobook narrator',
+    rate: 1.0,
+    language: 'English (en-US)',
+    notes: 'Works 100% offline using your phone speech engine.',
+    isBuiltIn: false,
+    createdAt: 1001,
+  },
+  {
+    id: 'pack:offline-us-deep',
+    name: 'English (US) · Deep Chronicle',
+    engine: 'device-tts',
+    voiceName: 'persona:Charon',
+    stylePrompt: 'Deep, calm, measured narrator for fantasy and history',
+    rate: 0.94,
+    language: 'English (en-US)',
+    notes: 'Tuned deeper tone for Android offline voice.',
+    isBuiltIn: false,
+    createdAt: 1002,
+  },
+  {
+    id: 'pack:offline-en-crisp',
+    name: 'English · Crisp Study Reader',
+    engine: 'device-tts',
+    voiceName: 'persona:Zephyr',
+    stylePrompt: 'Clear, slightly faster narrator for technical PDFs',
+    rate: 1.08,
+    language: 'English (en-US)',
+    notes: 'Great for articles, study notes, and documentation.',
+    isBuiltIn: false,
+    createdAt: 1003,
+  },
+  {
+    id: 'pack:offline-es-warm',
+    name: 'Español · Narrador Natural',
+    engine: 'device-tts',
+    voiceName: 'persona:Aoede',
+    stylePrompt: 'Voz cálida y fluida en español para libros y novelas',
+    rate: 1.0,
+    language: 'Spanish (es)',
+    notes: 'Lee PDFs en español sin internet usando voces del teléfono.',
+    isBuiltIn: false,
+    createdAt: 1004,
+  },
+  {
+    id: 'pack:offline-es-deep',
+    name: 'Español · Crónica Profunda',
+    engine: 'device-tts',
+    voiceName: 'persona:Fenrir',
+    stylePrompt: 'Voz grave y pausada para fantasía y misterio',
+    rate: 0.95,
+    language: 'Spanish (es)',
+    notes: 'Tono grave optimizado para capítulos largos.',
+    isBuiltIn: false,
+    createdAt: 1005,
+  },
+  {
+    id: 'pack:offline-night-soft',
+    name: 'Soft Late-Night Reader (Auto EN/ES)',
+    engine: 'device-tts',
+    voiceName: 'persona:Leda',
+    stylePrompt: 'Gentle, unhurried late-night reader that auto-detects language',
+    rate: 0.92,
+    language: 'Auto (EN / ES)',
+    notes: 'Automatically switches between English and Spanish pages.',
+    isBuiltIn: false,
+    createdAt: 1006,
+  },
+];
 
 export function getDeviceNaturalVoices(): DeviceVoiceOption[] {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
@@ -223,6 +300,7 @@ export function getDeviceNaturalVoices(): DeviceVoiceOption[] {
       voiceURI: v.voiceURI || v.name,
       name: v.name,
       lang: v.lang,
+      localService: v.localService,
     }));
   } catch {
     return [];
