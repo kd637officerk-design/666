@@ -16,7 +16,7 @@ interface NativeMediaPlugin {
   addListener?: (
     eventName: 'mediaAction',
     listener: (data: { action: string; positionMs?: number }) => void
-  ) => Promise<{ remove: () => Promise<void> }>;
+  ) => Promise<{ remove: () => Promise<void> }> | { remove: () => Promise<void> };
 }
 
 function getNativeMediaPlugin(): NativeMediaPlugin | null {
@@ -191,11 +191,11 @@ export function subscribeNativeMediaActions(handlers: {
   const nativePlugin = getNativeMediaPlugin();
   if (!nativePlugin?.addListener) return () => {};
 
-  let handle: { remove: () => Promise<void> } | null = null;
+  let handle: { remove?: () => Promise<void> | void } | null = null;
   let active = true;
 
-  void nativePlugin
-    .addListener('mediaAction', (evt) => {
+  try {
+    const maybePromise = nativePlugin.addListener('mediaAction', (evt) => {
       if (!active) return;
       switch (evt.action) {
         case 'play':
@@ -219,13 +219,29 @@ export function subscribeNativeMediaActions(handlers: {
           handlers.onStop();
           break;
       }
-    })
-    .then((h) => {
-      handle = h;
     });
+
+    void Promise.resolve(maybePromise)
+      .then((h) => {
+        if (!active) {
+          void h?.remove?.();
+        } else {
+          handle = h || null;
+        }
+      })
+      .catch(() => {
+        // ignore unsupported listener registration
+      });
+  } catch {
+    // ignore if native listener bridge isn't ready
+  }
 
   return () => {
     active = false;
-    void handle?.remove();
+    try {
+      void handle?.remove?.();
+    } catch {
+      // ignore cleanup error
+    }
   };
 }
